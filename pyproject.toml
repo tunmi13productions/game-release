@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "game-release"
+version = "1.0.0"
+description = "Builds tunmi13productions games with Nuitka for Windows, Linux and macOS, and releases them through GitHub."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["nuitka>=2.4", "ordered-set", "zstandard"]
+
+[project.scripts]
+game-release = "game_release.cli:main"
+
+[tool.setuptools]
+packages = ["game_release"]

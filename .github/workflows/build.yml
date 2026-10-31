@@ -1,0 +1,103 @@
+# The shared release workflow. Each game's own .github/workflows/release.yml calls this,
+# so a fix here reaches every game. It reads the game's release.json, builds each system
+# listed there on GitHub's own machines, and, for a version tag, publishes one release
+# carrying every archive. A run with no tag, from the Actions page or release.py's test
+# build, builds everything and publishes nothing.
+name: Build and release a game
+
+on:
+  workflow_call:
+    inputs:
+      tool_ref:
+        description: The branch or tag of game-release to build with.
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Read release.json
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      python: ${{ steps.plan.outputs.python }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet "game-release @ git+https://github.com/tunmi13productions/game-release@${{ inputs.tool_ref }}"
+      - id: plan
+        run: game-release ci-plan >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.system }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # every system finishes, so re-running the one that failed is all a bad build needs
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.plan.outputs.python }}
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf ccache
+      - name: Install the game's packages and the tool
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install "game-release @ git+https://github.com/tunmi13productions/game-release@${{ inputs.tool_ref }}"
+      - name: Build and pack
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          PLAN_TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then TAG="$REF_NAME"; else TAG="$PLAN_TAG"; fi
+          game-release ci-build "$TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.system }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  release:
+    name: Publish the release
+    # every build must have worked, or nothing is published
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet "game-release @ git+https://github.com/tunmi13productions/game-release@${{ inputs.tool_ref }}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          merge-multiple: true
+          path: archives
+      - name: Publish
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: game-release ci-release "$TAG" archives
+      - name: Say what a tag would publish
+        if: github.ref_type != 'tag'
+        run: game-release ci-release "${{ needs.plan.outputs.tag }}" archives --dry-run
