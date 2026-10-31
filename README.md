@@ -13,7 +13,7 @@ Run the game's release.py with the game's venv for a numbered menu, for example 
 3. Build the Linux release in WSL. From Windows only.
 4. Release. Checks that everything is committed and pushed, then tags the version, like v0.2, and pushes the tag. GitHub then builds every system and publishes one release with all of them. A release is only published if every system built.
 5. Check on GitHub's builds. Says how the latest builds went.
-6. Test the GitHub build. Builds every system on GitHub and publishes nothing.
+6. Test the GitHub build. Builds every system on GitHub and publishes nothing. The archives land on a hidden draft release called test-build, to download and try.
 7. Check what would stop a build or a release.
 8. Set up the game's venv. Makes it if needed, installs requirements.txt, and installs this tool. A local copy of this tool is installed editable, so editing it changes every game at once.
 9. Set up WSL to build Linux. Once per WSL distro.
@@ -75,4 +75,4 @@ Optional:
 
 GitHub gives a free account 2,000 build minutes a month for private repositories, and Mac minutes count ten times. A full release builds two Macs, so use Test the GitHub build when something changed in how a game builds, not before every release.
 
-Private repositories also have a small storage allowance, and workflow artifacts count against it, which once filled up. So a release never passes its archives through artifacts. A tag makes a hidden draft release, each build uploads its archive straight onto it, and the draft is published only when every system's archive is there. If one system fails, the draft stays hidden, and re-running that one job finishes it. A test build keeps its archives as artifacts for one day only.
+Private repositories also have a small storage allowance for the month, and workflow artifacts count against it, even ones kept for a day. Christmas Dash's builds filled it twice. So archives never go through artifacts at all. A tag makes a hidden draft release, each build uploads its archive straight onto it, and the draft is published only when every system's archive is there. If one system fails, the draft stays hidden, and re-running that one job finishes it. A test build uploads to a hidden draft release called test-build instead, which is never published. Each test build replaces the last, and you can download its archives from the repository's releases page to try.

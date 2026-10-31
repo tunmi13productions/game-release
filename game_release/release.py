@@ -18,7 +18,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from pathlib import Path
+
 
 from . import build as build_mod
 from . import fetch, package
@@ -208,84 +208,115 @@ def ci_build(cfg: Config, tag: str) -> int:
     return 0
 
 
-# A tag's archives go straight onto the release, never through the workflow's artifact
-# storage: in a private repository, artifacts count against the account's storage quota
-# and release files do not, and Christmas Dash's old workflow once filled that quota.
-# So ci-draft makes the release as a draft, which players cannot see, each build job
+# Archives never pass through the workflow's artifact storage. In a private repository,
+# artifacts count against the account's storage quota for the month, even ones kept for
+# a day, and release files do not. Christmas Dash's builds hit that quota twice.
+#
+# For a tag, ci-draft makes the release as a draft, which players cannot see, each build
 # uploads its own archive with ci-upload, and ci-release publishes the draft only once
 # every system's archive is on it. A build that failed leaves the draft hidden, and
 # re-running that one job adds the missing archive.
+#
+# A test run does the same with a draft release called test-build, which is never
+# published. Each test run replaces the last, and its archives can be downloaded from the
+# repository's releases page to try.
 
-def _release_state(cfg: Config, tag: str):
-    """(exists, is_draft, asset names) for the release of tag."""
-    ok, out = gh(cfg, "release", "view", tag, "--json", "isDraft,assets")
+TEST_RELEASE = "test-build"
+
+
+def _release_state(cfg: Config, name: str):
+    """(exists, is_draft, asset names) for the release with this tag name."""
+    ok, out = gh(cfg, "release", "view", name, "--json", "isDraft,assets")
     if not ok:
         return False, False, set()
     data = json.loads(out)
     return True, data["isDraft"], {a["name"] for a in data["assets"]}
 
 
-def ci_draft(cfg: Config, tag: str) -> int:
+def _create_draft(cfg: Config, name: str, title: str, notes: str, *extra) -> bool:
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write(notes + "\n")
+        notes_file = f.name
+    try:
+        ok, _ = gh(cfg, "release", "create", name, "--draft", *extra,
+                   "--title", title, "--notes-file", notes_file, capture=False)
+    finally:
+        os.remove(notes_file)
+    return ok
+
+
+def ci_draft(cfg: Config, tag: str, test: bool = False) -> int:
     version = cfg.version_from_tag(tag)
     if version is None:
         say(f"{tag} is not a release tag for this game.")
         return 1
+    if test:
+        exists, draft, _ = _release_state(cfg, TEST_RELEASE)
+        if exists and not draft:
+            say(f"A published release is called {TEST_RELEASE}, so test builds cannot use that name.")
+            return 1
+        if exists:
+            ok, out = gh(cfg, "release", "delete", TEST_RELEASE, "--yes")
+            if not ok:
+                say("The last test build's draft could not be removed: " + out)
+                return 1
+        target = os.environ.get("GITHUB_SHA", "main")
+        ok = _create_draft(cfg, TEST_RELEASE, f"Test build of {cfg.name} {version}",
+                           "A test build, never published. Each test build replaces this.\n\n"
+                           + release_notes(cfg, version), "--target", target)
+        say(f"A hidden {TEST_RELEASE} draft is ready for the builds." if ok else "The test draft could not be made.")
+        return 0 if ok else 1
     exists, draft, _ = _release_state(cfg, tag)
     if exists:
         say(f"The release for {tag} is already there{' as a draft' if draft else ''}, so builds add what it lacks.")
         return 0
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
-        f.write(release_notes(cfg, version) + "\n")
-        notes_file = f.name
-    try:
-        ok, _ = gh(cfg, "release", "create", tag, "--draft", "--verify-tag",
-                   "--title", f"{cfg.name} {version}", "--notes-file", notes_file, capture=False)
-    finally:
-        os.remove(notes_file)
+    ok = _create_draft(cfg, tag, f"{cfg.name} {version}", release_notes(cfg, version), "--verify-tag")
     say(f"A draft release for {tag} is ready for the builds." if ok else "The draft release could not be made.")
     return 0 if ok else 1
 
 
-def ci_upload(cfg: Config, tag: str) -> int:
+def ci_upload(cfg: Config, tag: str, test: bool = False) -> int:
     version = cfg.version_from_tag(tag)
     name = cfg.archive_name(version, this_system())
     path = cfg.root / "dist" / name
     if not path.is_file():
         say(f"There is no {name} to upload.")
         return 1
-    exists, _, have = _release_state(cfg, tag)
+    target = TEST_RELEASE if test else tag
+    exists, draft, have = _release_state(cfg, target)
     if not exists:
-        say(f"There is no release for {tag} to upload to.")
+        say(f"There is no release {target} to upload to.")
         return 1
-    if name in have:
+    if test and not draft:
+        say(f"{TEST_RELEASE} is published, so nothing was uploaded to it.")
+        return 1
+    if name in have and not test:
         say(f"{name} is already on the release, so it is left alone.")
         return 0
-    ok, _ = gh(cfg, "release", "upload", tag, str(path), capture=False)
-    say(f"{name} is on the release." if ok else f"{name} could not be uploaded.")
+    ok, _ = gh(cfg, "release", "upload", target, str(path), *(["--clobber"] if test else []), capture=False)
+    say(f"{name} is on {target}." if ok else f"{name} could not be uploaded.")
     return 0 if ok else 1
 
 
-def ci_release(cfg: Config, tag: str, folder: str | None, dry_run: bool) -> int:
+def ci_release(cfg: Config, tag: str, test: bool = False) -> int:
     version = cfg.version_from_tag(tag)
     if version is None:
         say(f"{tag} is not a release tag for this game.")
         return 1
     wanted = [cfg.archive_name(version, s) for s in cfg.systems]
     title = f"{cfg.name} {version}"
-    if dry_run:
-        found = {p.name: p for p in Path(folder).rglob("*") if p.is_file()} if folder else {}
-        missing = [w for w in wanted if w not in found]
-        if not problems(f"{len(missing)} archives are missing:", missing):
-            return 1
-        say(f"A test run publishes nothing. The tag {tag} would publish {title} with:")
-        for w in wanted:
-            say(f"  {w}, {found[w].stat().st_size / (1 << 20):.0f} megabytes")
-        return 0
-    exists, draft, have = _release_state(cfg, tag)
+    target = TEST_RELEASE if test else tag
+    exists, draft, have = _release_state(cfg, target)
     if not exists:
-        say(f"There is no release for {tag}.")
+        say(f"There is no release {target}.")
         return 1
     missing = [w for w in wanted if w not in have]
+    if test:
+        if not problems(f"{len(missing)} archives are missing from the test build:", missing):
+            return 1
+        say(f"The test build worked. Every archive is on the hidden {TEST_RELEASE} draft, to download and try.")
+        say(f"The tag {tag} would publish {title} with them.")
+        return 0
     if not problems(f"Nothing was published, and the release stays a hidden draft. {len(missing)} archives are missing:", missing):
         return 1
     if not draft:

@@ -2,13 +2,17 @@
 # so a fix here reaches every game. It reads the game's release.json and builds each
 # system listed there on GitHub's own machines.
 #
+# Archives never go through workflow artifacts: in a private repository they count
+# against the account's monthly storage quota, even kept for a day, and Christmas Dash's
+# builds hit it. Release files do not count.
+#
 # For a version tag, a hidden draft release is made first, each build uploads its
 # archive straight onto it, and the draft is published only once every system's archive
-# is there. Release files do not count against a private repository's storage quota,
-# and workflow artifacts do, which is how Christmas Dash's old workflow once filled it.
+# is there.
 #
-# A run with no tag, from the Actions page or release.py's test build, builds everything
-# and publishes nothing. Its archives are kept as artifacts for one day, to download and try.
+# A run with no tag, from the Actions page or release.py's test build, does the same
+# with a hidden draft called test-build, which is never published. Each test run
+# replaces the last, and its archives can be downloaded from the releases page.
 name: Build and release a game
 
 on:
@@ -45,6 +49,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: game-release ci-draft "${{ github.ref_name }}"
+      - name: Make the test-build draft
+        if: github.ref_type != 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: game-release ci-draft "${{ steps.plan.outputs.tag }}" --test
 
   build:
     name: Build ${{ matrix.system }}
@@ -84,17 +93,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: game-release ci-upload "${{ github.ref_name }}"
-      - name: Keep the test build for a day
+      - name: Upload to the test-build draft
         if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: archive-${{ matrix.system }}
-          path: |
-            dist/*.zip
-            dist/*.tar.gz
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: game-release ci-upload "${{ needs.plan.outputs.tag }}" --test
 
   release:
     name: Publish the release
@@ -114,12 +117,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: game-release ci-release "${{ github.ref_name }}"
-      - uses: actions/download-artifact@v4
+      - name: Check the test build has every archive
         if: github.ref_type != 'tag'
-        with:
-          pattern: archive-*
-          merge-multiple: true
-          path: archives
-      - name: Say what a tag would publish
-        if: github.ref_type != 'tag'
-        run: game-release ci-release "${{ needs.plan.outputs.tag }}" archives --dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: game-release ci-release "${{ needs.plan.outputs.tag }}" --test

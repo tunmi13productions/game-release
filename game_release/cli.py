@@ -108,12 +108,11 @@ def main(argv=None) -> None:
     for name in ("setup-wsl", "release", "test-workflow", "status", "check", "setup", "init", "ci-plan",
                  "fetch"):
         sub.add_parser(name)
-    for name in ("ci-build", "ci-draft", "ci-upload"):
-        sub.add_parser(name).add_argument("tag")
-    cr = sub.add_parser("ci-release")
-    cr.add_argument("tag")
-    cr.add_argument("folder", nargs="?")
-    cr.add_argument("--dry-run", action="store_true")
+    sub.add_parser("ci-build").add_argument("tag")
+    for name in ("ci-draft", "ci-upload", "ci-release"):
+        p = sub.add_parser(name)
+        p.add_argument("tag")
+        p.add_argument("--test", action="store_true")
     args = parser.parse_args(argv)
 
     if args.command == "init":
@@ -148,9 +147,9 @@ def main(argv=None) -> None:
         "ci-plan": lambda: release.ci_plan(cfg) == 0,
         "fetch": lambda: fetch.fetch(cfg, force=True),
         "ci-build": lambda: release.ci_build(cfg, args.tag) == 0,
-        "ci-draft": lambda: release.ci_draft(cfg, args.tag) == 0,
-        "ci-upload": lambda: release.ci_upload(cfg, args.tag) == 0,
-        "ci-release": lambda: release.ci_release(cfg, args.tag, args.folder, args.dry_run) == 0,
+        "ci-draft": lambda: release.ci_draft(cfg, args.tag, args.test) == 0,
+        "ci-upload": lambda: release.ci_upload(cfg, args.tag, args.test) == 0,
+        "ci-release": lambda: release.ci_release(cfg, args.tag, args.test) == 0,
     }
     try:
         ok = actions[args.command]()
