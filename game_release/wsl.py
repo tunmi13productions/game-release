@@ -99,7 +99,7 @@ if [ -f requirements.txt ]; then .release-venv/bin/python -m pip install --quiet
 .release-venv/bin/python -m pip install --quiet nuitka ordered-set zstandard
 .release-venv/bin/python -m game_release build {'--console' if console else ''}
 mkdir -p '{wsl_path(cfg.root)}/dist'
-cp dist/*-linux.tar.gz '{wsl_path(cfg.root)}/dist/'
+cp dist/*_linux.tar.gz '{wsl_path(cfg.root)}/dist/'
 """
     say(f"Building the Linux release in {cfg.wsl_distro}.")
     if _bash(cfg, script) != 0:

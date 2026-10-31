@@ -61,6 +61,7 @@ class Config:
     version_file: str
     version_pattern: str | None
     tag_prefix: str = "v"
+    archive_template: str = "{archive}_{system}"
     assets: list = field(default_factory=list)
     native_packages: list = field(default_factory=list)
     native_exclude: list = field(default_factory=list)
@@ -109,7 +110,11 @@ class Config:
         return self.root / "dist" / f"{self.archive}-{system}"
 
     def archive_name(self, version: str, system: str) -> str:
-        return f"{self.archive}-{version}-{system}.{SYSTEMS[system]['archive']}"
+        """Like behind_closed_doors_windows.zip, from archive_name in release.json, where
+        {archive}, {system} and {version} are filled in. The system uses underscores."""
+        base = self.archive_template.format(archive=self.archive, system=system.replace("-", "_"),
+                                            version=version)
+        return f"{base}.{SYSTEMS[system]['archive']}"
 
 
 def find_root(start: Path | None = None) -> Path:
@@ -166,6 +171,7 @@ def load(start: Path | None = None) -> Config:
         version_file=version_file,
         version_pattern=version_pattern,
         tag_prefix=data.get("tag_prefix", "v"),
+        archive_template=data.get("archive_name", "{archive}_{system}"),
         assets=_list(data, "assets"),
         native_packages=_list(data, "native_packages"),
         native_exclude=_list(data, "native_exclude"),

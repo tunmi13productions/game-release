@@ -39,7 +39,7 @@ Required:
 - name: what players see, like Behind Closed Doors. The Mac app is called this.
 - entry: the script the game starts from, like main.py.
 - executable: the program's name, without .exe.
-- archive: the archive's base name, like behind_closed_doors. A release's archives are named archive, version and system, like behind_closed_doors-0.2-windows.zip, and each holds one folder named archive.
+- archive: the archive's base name, like behind_closed_doors. A release's archives are named after it and the system: behind_closed_doors_windows.zip, behind_closed_doors_linux.tar.gz, behind_closed_doors_macos_arm64.tar.gz and behind_closed_doors_macos_x86_64.tar.gz. Each holds one folder named archive.
 - version: where the version lives. Either a file whose first line is the version, or an object with file and pattern, where pattern is a regular expression with one group, like {"file": "main.py", "pattern": "^VERSION = \"([^\"]+)\""}.
 
 Optional:
@@ -49,6 +49,7 @@ Optional:
 - native_exclude: patterns of native files to leave out, matched against their path in site-packages, like sound_lib/lib/x86/*.
 - nuitka_args: extra Nuitka arguments, under all, windows, linux, macos, or one exact system like macos-arm64.
 - changelog: a changelog file. A release's notes are the lines under a heading that is the version, like 2.0 or v2.0:, up to the next version heading.
+- archive_name: a different pattern for archive names, where {archive}, {system} and {version} are filled in. {archive}_{system} by default. {archive}_{version}_{system} would add the version.
 - tag_prefix: what goes before the version in a tag. v by default.
 - python: the Python version GitHub builds with. 3.12 by default.
 - systems: which of windows, linux, macos-arm64 and macos-x86_64 a release carries. All four by default.
