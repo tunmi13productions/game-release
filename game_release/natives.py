@@ -28,7 +28,6 @@ import importlib.util
 import re
 import sys
 from dataclasses import dataclass, field
-from importlib import metadata
 from importlib.metadata import packages_distributions
 from pathlib import Path
 
@@ -42,7 +41,6 @@ _LIBRARY = {
 # Names compiled Python extension modules have: buffer.cp312-win_amd64.pyd,
 # buffer.cpython-312-x86_64-linux-gnu.so, _prism_cffi.abi3.so.
 _EXTENSION = re.compile(r"(\.pyd$|\.cpython-|\.abi3\.|\.cp\d+-)")
-_LICENSE = re.compile(r"^(COPYING|LICEN[SC]E|NOTICE)(\..*)?$", re.IGNORECASE)
 
 
 @dataclass
@@ -94,33 +92,8 @@ def find(packages, exclude, system: str) -> Natives:
         for path in sorted(pkg.rglob("*")):
             if path.is_file() and pattern.search(path.name):
                 add(path, site)
-        # the libraries' licenses, which most of them require shipping alongside
-        for path in sorted(pkg.iterdir()):
-            if path.is_file() and _LICENSE.match(path.name):
-                add(path, site)
+        # licenses are shipped by licenses.py, the way release.json chooses
         for dist in distributions.get(name, []):
-            # the package's licenses from its install metadata, into licenses/<distribution>/,
-            # with .txt added to a name with no extension, so Windows opens it
-            try:
-                entries = metadata.distribution(dist).files or []
-            except metadata.PackageNotFoundError:
-                entries = []
-            for entry in entries:
-                parts = entry.parts
-                if len(parts) < 2 or not parts[0].endswith(".dist-info"):
-                    continue
-                if parts[1] == "licenses" and len(parts) > 2:
-                    inside = list(parts[2:])
-                elif len(parts) == 2 and _LICENSE.match(parts[1]):
-                    inside = [parts[1]]
-                else:
-                    continue
-                if "." not in inside[-1]:
-                    inside[-1] += ".txt"
-                rel = "/".join(["licenses", dist, *inside])
-                if rel not in seen:
-                    seen.add(rel)
-                    found.files.append((Path(entry.locate()), rel))
             for libs in (site / f"{dist}.libs", site / f"{dist.replace('-', '_')}.libs"):
                 if libs.is_dir():
                     for path in sorted(libs.rglob("*")):

@@ -28,6 +28,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version as installed_version
 from pathlib import Path
 
+from . import licenses as licenses_mod
 from . import natives as natives_mod
 from .config import SPOKEN_SYSTEMS, Config, family, this_system
 from .ui import say
@@ -216,6 +217,8 @@ def build(cfg: Config, console: bool = False) -> Path:
     say(f"Added {copied} native files Nuitka could not see.")
     say("Copying assets:")
     copy_assets(cfg, resource_dir, code_dir)
+    found = licenses_mod.gather(cfg.native_packages + cfg.license_packages) if cfg.licenses != "off" else []
+    say(licenses_mod.ship(found, cfg.licenses, resource_dir))
     if app:
         say("Writing the version into the app, and signing it again.")
         finish_app(app, cfg, version)

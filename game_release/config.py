@@ -67,6 +67,8 @@ class Config:
     assets: list = field(default_factory=list)
     native_packages: list = field(default_factory=list)
     native_exclude: list = field(default_factory=list)
+    licenses: str = "folder"
+    license_packages: list = field(default_factory=list)
     nuitka_args: dict = field(default_factory=dict)
     python: str = "3.12"
     systems: list = field(default_factory=lambda: list(SYSTEMS))
@@ -136,6 +138,13 @@ def _list(data, key):
     return value
 
 
+def _licenses(data) -> str:
+    mode = data.get("licenses", "folder")
+    if mode not in ("folder", "file", "off"):
+        raise ConfigError('licenses must be "folder", "file" or "off"')
+    return mode
+
+
 def _fetch(data) -> list:
     items = data.get("fetch", [])
     if not isinstance(items, list):
@@ -190,6 +199,8 @@ def load(start: Path | None = None) -> Config:
         assets=_list(data, "assets"),
         native_packages=_list(data, "native_packages"),
         native_exclude=_list(data, "native_exclude"),
+        licenses=_licenses(data),
+        license_packages=_list(data, "license_packages"),
         nuitka_args=nuitka_args,
         python=str(data.get("python", "3.12")),
         systems=systems,

@@ -46,6 +46,8 @@ Optional:
 
 - assets: files and folders copied beside the program, like sounds and readme.txt. On a Mac they go in the app's Resources folder, with a link beside the program, so loading them relative to the executable still works.
 - native_packages: packages that load native libraries by hand, which Nuitka cannot see. Every game lists its own, since not every game uses the same audio library. For example cyal, prism and _soundfile_data for a game on OpenAL with libsndfile, or sound_lib and prism for a game on BASS. Their libraries for the system being built are copied into the build at the same place they have in site-packages.
+- licenses: how the libraries' licenses ship, which most open source licenses require. folder, the default, adds a licenses folder with one folder per library. file adds one licenses.txt beside the readme, with a heading for each library. off adds none. The libraries are Python itself, every package in native_packages, and every package in license_packages.
+- license_packages: more packages whose licenses ship, that have no native files to bundle, like pygame.
 - native_exclude: patterns of native files to leave out, matched against their path in site-packages, like sound_lib/lib/x86/*.
 - nuitka_args: extra Nuitka arguments, under all, windows, linux, macos, or one exact system like macos-arm64.
 - changelog: a changelog file. A release's notes are the lines under a heading that is the version, like 2.0 or v2.0:, up to the next version heading.
