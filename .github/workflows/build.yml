@@ -1,8 +1,14 @@
 # The shared release workflow. Each game's own .github/workflows/release.yml calls this,
-# so a fix here reaches every game. It reads the game's release.json, builds each system
-# listed there on GitHub's own machines, and, for a version tag, publishes one release
-# carrying every archive. A run with no tag, from the Actions page or release.py's test
-# build, builds everything and publishes nothing.
+# so a fix here reaches every game. It reads the game's release.json and builds each
+# system listed there on GitHub's own machines.
+#
+# For a version tag, a hidden draft release is made first, each build uploads its
+# archive straight onto it, and the draft is published only once every system's archive
+# is there. Release files do not count against a private repository's storage quota,
+# and workflow artifacts do, which is how Christmas Dash's old workflow once filled it.
+#
+# A run with no tag, from the Actions page or release.py's test build, builds everything
+# and publishes nothing. Its archives are kept as artifacts for one day, to download and try.
 name: Build and release a game
 
 on:
@@ -20,6 +26,8 @@ jobs:
   plan:
     name: Read release.json
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       python: ${{ steps.plan.outputs.python }}
@@ -32,11 +40,18 @@ jobs:
       - run: python -m pip install --quiet "game-release @ git+https://github.com/tunmi13productions/game-release@${{ inputs.tool_ref }}"
       - id: plan
         run: game-release ci-plan >> "$GITHUB_OUTPUT"
+      - name: Make the draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: game-release ci-draft "${{ github.ref_name }}"
 
   build:
     name: Build ${{ matrix.system }}
     needs: plan
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       # every system finishes, so re-running the one that failed is all a bad build needs
       fail-fast: false
@@ -64,7 +79,14 @@ jobs:
         run: |
           if [ "$REF_TYPE" = tag ]; then TAG="$REF_NAME"; else TAG="$PLAN_TAG"; fi
           game-release ci-build "$TAG"
-      - uses: actions/upload-artifact@v4
+      - name: Upload to the draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: game-release ci-upload "${{ github.ref_name }}"
+      - name: Keep the test build for a day
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
         with:
           name: archive-${{ matrix.system }}
           path: |
@@ -72,7 +94,7 @@ jobs:
             dist/*.tar.gz
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
 
   release:
     name: Publish the release
@@ -87,17 +109,17 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --quiet "game-release @ git+https://github.com/tunmi13productions/game-release@${{ inputs.tool_ref }}"
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: archive-*
-          merge-multiple: true
-          path: archives
       - name: Publish
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: game-release ci-release "$TAG" archives
+        run: game-release ci-release "${{ github.ref_name }}"
+      - uses: actions/download-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          pattern: archive-*
+          merge-multiple: true
+          path: archives
       - name: Say what a tag would publish
         if: github.ref_type != 'tag'
         run: game-release ci-release "${{ needs.plan.outputs.tag }}" archives --dry-run

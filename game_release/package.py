@@ -2,8 +2,9 @@
 
 Windows gets a zip, which it opens with nothing installed. Linux and Mac get a gzipped
 tar, which keeps the executable bit and symbolic links, and a Mac app needs both.
-Everything sits under one folder inside the archive, so extracting it gives a player a
-folder rather than a heap of files in their Downloads. The archive is written under a
+With archive_folder on in release.json, everything sits under one folder named after the
+archive, as Sixth Sense Reborn does. It is off by default, as the games have always
+shipped: the executable at the top of the zip. The archive is written under a
 .part name and renamed only when whole, so a half-written one never looks finished.
 """
 from __future__ import annotations
@@ -19,7 +20,7 @@ from .ui import say
 _STEPS = 4
 
 
-def pack(build_dir: Path, archive: Path, top: str) -> Path:
+def pack(build_dir: Path, archive: Path, top: str | None) -> Path:
     partial = archive.with_name(archive.name + ".part")
     for old in (archive, partial):
         if old.exists():
@@ -47,7 +48,9 @@ def pack(build_dir: Path, archive: Path, top: str) -> Path:
                 box.write(full, inside)
     with box:
         for count, full in enumerate(entries, 1):
-            inside = (top + "/" + os.path.relpath(full, build_dir)).replace(os.sep, "/")
+            inside = os.path.relpath(full, build_dir).replace(os.sep, "/")
+            if top:
+                inside = top + "/" + inside
             put(full, inside)
             if count in marks:
                 say(f"  {count} of {len(entries)} files packed.")

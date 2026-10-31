@@ -62,6 +62,8 @@ class Config:
     version_pattern: str | None
     tag_prefix: str = "v"
     archive_template: str = "{archive}_{system}"
+    archive_folder: bool = False
+    fetch: list = field(default_factory=list)
     assets: list = field(default_factory=list)
     native_packages: list = field(default_factory=list)
     native_exclude: list = field(default_factory=list)
@@ -134,6 +136,17 @@ def _list(data, key):
     return value
 
 
+def _fetch(data) -> list:
+    items = data.get("fetch", [])
+    if not isinstance(items, list):
+        raise ConfigError("fetch must be a list")
+    for item in items:
+        if not isinstance(item, dict) or "url" not in item or not (
+                "extract_to" in item or "save_as" in item):
+            raise ConfigError("each fetch entry needs a url, and extract_to or save_as")
+    return items
+
+
 def load(start: Path | None = None) -> Config:
     root = find_root(start)
     try:
@@ -172,6 +185,8 @@ def load(start: Path | None = None) -> Config:
         version_pattern=version_pattern,
         tag_prefix=data.get("tag_prefix", "v"),
         archive_template=data.get("archive_name", "{archive}_{system}"),
+        archive_folder=bool(data.get("archive_folder", False)),
+        fetch=_fetch(data),
         assets=_list(data, "assets"),
         native_packages=_list(data, "native_packages"),
         native_exclude=_list(data, "native_exclude"),

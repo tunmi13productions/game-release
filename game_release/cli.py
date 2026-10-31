@@ -15,7 +15,9 @@ can hear how it went. Each menu choice is also a command:
     setup             make the game's venv and install everything into it
     init              write release.json, the workflow and release.py for a new game
 
-The workflow runs ci-plan, ci-build and ci-release; they are not for typing.
+    fetch             download what fetch in release.json names again, like hosted sounds
+
+The workflow runs ci-plan, ci-draft, ci-build, ci-upload and ci-release; they are not for typing.
 """
 from __future__ import annotations
 
@@ -25,12 +27,14 @@ import sys
 from pathlib import Path
 
 from . import build as build_mod
-from . import package, project, release, wsl
+from . import fetch, package, project, release, wsl
 from .config import SPOKEN_SYSTEMS, ConfigError, load, this_system
 from .ui import ask, problems, say
 
 
 def do_build(cfg, console=False, archive=True) -> bool:
+    if not fetch.fetch(cfg):
+        return False
     if not problems("The build cannot start:", build_mod.problems(cfg)):
         return False
     mismatched = build_mod.requirement_mismatches(cfg)
@@ -45,7 +49,8 @@ def do_build(cfg, console=False, archive=True) -> bool:
         say(f"The build failed: {error}")
         return False
     if archive and not console:
-        package.pack(folder, cfg.root / "dist" / cfg.archive_name(cfg.version(), this_system()), cfg.archive)
+        package.pack(folder, cfg.root / "dist" / cfg.archive_name(cfg.version(), this_system()),
+                     cfg.archive if cfg.archive_folder else None)
     return True
 
 
@@ -100,13 +105,14 @@ def main(argv=None) -> None:
     b.add_argument("--no-archive", action="store_true")
     li = sub.add_parser("linux")
     li.add_argument("--console", action="store_true")
-    for name in ("setup-wsl", "release", "test-workflow", "status", "check", "setup", "init", "ci-plan"):
+    for name in ("setup-wsl", "release", "test-workflow", "status", "check", "setup", "init", "ci-plan",
+                 "fetch"):
         sub.add_parser(name)
-    cb = sub.add_parser("ci-build")
-    cb.add_argument("tag")
+    for name in ("ci-build", "ci-draft", "ci-upload"):
+        sub.add_parser(name).add_argument("tag")
     cr = sub.add_parser("ci-release")
     cr.add_argument("tag")
-    cr.add_argument("folder")
+    cr.add_argument("folder", nargs="?")
     cr.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -140,7 +146,10 @@ def main(argv=None) -> None:
         "check": lambda: do_check(cfg) or True,
         "setup": lambda: project.setup_venv(cfg),
         "ci-plan": lambda: release.ci_plan(cfg) == 0,
+        "fetch": lambda: fetch.fetch(cfg, force=True),
         "ci-build": lambda: release.ci_build(cfg, args.tag) == 0,
+        "ci-draft": lambda: release.ci_draft(cfg, args.tag) == 0,
+        "ci-upload": lambda: release.ci_upload(cfg, args.tag) == 0,
         "ci-release": lambda: release.ci_release(cfg, args.tag, args.folder, args.dry_run) == 0,
     }
     try:
