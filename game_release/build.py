@@ -105,6 +105,25 @@ def problems(cfg: Config) -> list:
     return found
 
 
+def compiled_packages(names) -> list:
+    """The packages in native_packages that hold compiled modules (.pyd or .so), to be included whole.
+
+    A compiled module can import its neighbours from inside its machine code, which Nuitka cannot follow:
+    cyal's device module imports listener that way, so a build left listener, efx, exceptions and hrtf out
+    and the game crashed at start. Data-only packages, like _soundfile_data, are left to the native copy."""
+    found = []
+    for name in names:
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            continue
+        for folder in (spec.submodule_search_locations or []) if spec else []:
+            if any(p.suffix in (".pyd", ".so") for p in Path(folder).iterdir() if p.is_file()):
+                found.append(name)
+                break
+    return found
+
+
 def nuitka_command(cfg: Config, system: str, version: str, console: bool, natives, out: Path) -> list:
     exe = cfg.executable + (".exe" if system == "windows" else "")
     cmd = [sys.executable, "-m", "nuitka", "--standalone", "--assume-yes-for-downloads",
@@ -118,6 +137,7 @@ def nuitka_command(cfg: Config, system: str, version: str, console: bool, native
                 f"--macos-app-version={version}", f"--macos-signed-app-name={cfg.bundle_id}"]
     if natives.hidden_extensions and importlib.util.find_spec("_cffi_backend"):
         cmd.append("--include-module=_cffi_backend")
+    cmd += [f"--include-package={name}" for name in compiled_packages(cfg.native_packages)]
     cmd += cfg.nuitka_for(system)
     cmd.append(cfg.entry)
     return cmd

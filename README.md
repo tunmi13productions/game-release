@@ -72,6 +72,7 @@ Optional:
 - Building with the wrong Python. A build checks the installed packages against the versions pinned in requirements.txt. A newer prism in the global Python once crashed a build at startup with No module named prism._prism_cffi.
 - That prism module, and any compiled module in a folder that is not a package, is copied in, along with cffi's _cffi_backend and, on Windows, python3.dll, which it needs and Nuitka cannot see.
 - A Linux wheel repaired by auditwheel keeps its libraries in a .libs folder beside the package, and that folder is copied too.
+- A compiled module can import its neighbours from inside its machine code, where Nuitka cannot follow. cyal's device module imports listener that way, and Nebula's first build crashed at start without them. Every package in native_packages that holds compiled modules is now included whole.
 
 ## Costs
 
