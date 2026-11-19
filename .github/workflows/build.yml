@@ -13,6 +13,12 @@
 # A run with no tag, from the Actions page or release.py's test build, does the same
 # with a hidden draft called test-build, which is never published. Each test run
 # replaces the last, and its archives can be downloaded from the releases page.
+#
+# Nuitka's cache (compiled C, and ccache's on Linux and macOS) is kept between runs, one
+# per system, so a build only compiles what changed. GitHub lets a run read caches from
+# its own branch or tag and from the default branch, so a release tag can't see the last
+# release's cache: test builds, which run on the default branch, are what fill the one
+# every release starts from.
 name: Build and release a game
 
 on:
@@ -73,6 +79,17 @@ jobs:
       - name: Install Linux build tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y patchelf ccache
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install ccache
+      - name: Restore Nuitka's cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/nuitka-cache
+          key: nuitka-${{ matrix.system }}-${{ github.run_id }}
+          restore-keys: nuitka-${{ matrix.system }}-
       - name: Install the game's packages and the tool
         shell: bash
         run: |
@@ -85,6 +102,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           PLAN_TAG: ${{ needs.plan.outputs.tag }}
+          NUITKA_CACHE_DIR: ${{ runner.temp }}/nuitka-cache
         run: |
           if [ "$REF_TYPE" = tag ]; then TAG="$REF_NAME"; else TAG="$PLAN_TAG"; fi
           game-release ci-build "$TAG"
